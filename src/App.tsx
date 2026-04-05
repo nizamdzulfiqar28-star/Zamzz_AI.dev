@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 import ReactMarkdown from 'react-markdown';
 
 const Background = () => {
@@ -125,7 +125,8 @@ export default function App() {
   const [imgError, setImgError] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // Gunakan fallback 'missing_api_key' agar aplikasi tidak crash saat pertama kali dimuat jika API key belum diatur
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'missing_api_key', dangerouslyAllowBrowser: true });
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 3000);
@@ -149,7 +150,7 @@ export default function App() {
 Tentang dirimu:
 - Nama: Zamzz.AI
 - Dibuat oleh: Nizam DzR.Dev </> (pelajar SMP di SMPN 1 IBUN, web developer & software engineer muda)
-- Teknologi: Berbasis Google Gemini AI
+- Teknologi: Berbasis Groq AI (Llama 3)
 - Kemampuan: Coding (semua bahasa), analisis, penjelasan konsep, dan banyak lagi
 
 Tentang Nizam DzR.Dev </>:
@@ -188,24 +189,34 @@ Fokus pada pembuatan kode berkualitas tinggi. Selalu:
 
     try {
       const history = messages.map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }]
-      }));
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      })) as any[];
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [...history, { role: 'user', parts: [{ text: textToSend }] }],
-        config: {
-          systemInstruction: getSystemPrompt(),
-          temperature: 0.85,
-          topK: 40,
-          topP: 0.95,
-        }
+      const response = await groq.chat.completions.create({
+        messages: [
+          { role: 'system', content: getSystemPrompt() },
+          ...history,
+          { role: 'user', content: textToSend }
+        ],
+        model: 'llama3-8b-8192',
+        temperature: 0.85,
+        max_tokens: 4096,
       });
 
-      setMessages(prev => [...prev, { role: 'bot', content: response.text || 'Maaf, tidak ada respons.', time: getTime() }]);
+      const reply = response.choices[0]?.message?.content || 'Maaf, tidak ada respons.';
+      setMessages(prev => [...prev, { role: 'bot', content: reply, time: getTime() }]);
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'bot', content: `Terjadi kesalahan: ${err.message}`, time: getTime() }]);
+      let errorMessage = `Terjadi kesalahan: ${err.message}`;
+      
+      // Handle specific API errors gracefully
+      if (err.message.includes('429') || err.message.includes('Quota exceeded') || err.message.includes('RESOURCE_EXHAUSTED')) {
+        errorMessage = '⚠️ Maaf, batas penggunaan (kuota) AI sedang habis atau terlalu banyak permintaan. Silakan coba lagi dalam beberapa menit.';
+      } else if (err.message.includes('API_KEY_INVALID') || err.message.includes('401') || err.message.includes('missing_api_key')) {
+        errorMessage = '❌ GROQ API Key tidak valid atau belum dikonfigurasi. Pastikan Anda telah menambahkan GROQ_API_KEY di pengaturan Vercel atau AI Studio.';
+      }
+
+      setMessages(prev => [...prev, { role: 'bot', content: errorMessage, time: getTime() }]);
     } finally {
       setIsLoading(false);
     }
@@ -287,7 +298,7 @@ Fokus pada pembuatan kode berkualitas tinggi. Selalu:
           </div>
           <div className="header-status">
             <div className="status-dot"></div>
-            <span className="status-text">ONLINE · GEMINI API</span>
+            <span className="status-text">ONLINE · GROQ API</span>
           </div>
           <div className="header-nav">
             <button className={`nav-btn ${mode === 'chat' ? 'active' : ''}`} onClick={() => setMode('chat')}>💬 CHAT</button>
@@ -367,7 +378,7 @@ Fokus pada pembuatan kode berkualitas tinggi. Selalu:
             <div className="sidebar-section">
               <div className="sidebar-label">🔑 Status API</div>
               <div style={{background:'rgba(0,245,255,0.04)', border:'1px solid rgba(0,245,255,0.1)', borderRadius:'8px', padding:'10px'}}>
-                <div style={{fontSize:'0.72rem', color:'var(--text-muted)', fontFamily:"'Share Tech Mono',monospace", marginBottom:'6px'}}>GEMINI API KEY</div>
+                <div style={{fontSize:'0.72rem', color:'var(--text-muted)', fontFamily:"'Share Tech Mono',monospace", marginBottom:'6px'}}>GROQ API KEY</div>
                 <div style={{fontSize:'0.75rem', color:'#00ff88', fontFamily:"'Share Tech Mono',monospace"}}>✅ Terhubung (Env)</div>
               </div>
             </div>
@@ -573,7 +584,7 @@ Fokus pada pembuatan kode berkualitas tinggi. Selalu:
           <div style={{background:'rgba(0,245,255,0.04)', border:'1px solid rgba(0,245,255,0.1)', borderRadius:'12px', padding:'16px'}}>
             <div style={{fontFamily:"'Orbitron',monospace", fontSize:'0.85rem', color:'var(--primary)', marginBottom:'8px'}}>🤖 TENTANG ZAMZZ.AI</div>
             <div style={{fontSize:'0.83rem', color:'var(--text-dim)', lineHeight:'1.7'}}>
-              Zamzz.AI adalah asisten digital berbasis AI yang ditenagai oleh <strong style={{color:'var(--primary)'}}>Google Gemini API</strong>. Dirancang untuk membantu developer, pelajar, dan siapapun yang membutuhkan bantuan di bidang teknologi, coding, dan berbagai topik lainnya.
+              Zamzz.AI adalah asisten digital berbasis AI yang ditenagai oleh <strong style={{color:'var(--primary)'}}>Groq API (Llama 3)</strong>. Dirancang untuk membantu developer, pelajar, dan siapapun yang membutuhkan bantuan di bidang teknologi, coding, dan berbagai topik lainnya.
             </div>
           </div>
         </div>
