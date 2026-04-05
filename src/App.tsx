@@ -199,7 +199,7 @@ Fokus pada pembuatan kode berkualitas tinggi. Selalu:
           ...history,
           { role: 'user', content: textToSend }
         ],
-        model: 'llama3-8b-8192',
+        model: 'llama-3.1-8b-instant',
         temperature: 0.85,
         max_tokens: 4096,
       });
